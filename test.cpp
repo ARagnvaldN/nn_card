@@ -5,7 +5,6 @@
 #include <random>
 
 // NxKxHxW
-// TODO: Data layer
 // TODO: Load weights
 // TODO: Format for reading network (LOW)
 
@@ -27,7 +26,6 @@ struct layer_params {
 };
 
 struct layer{
-    layer(): input(0), output(0), type(INNER_PRODUCT), bias(nullptr), weights(nullptr) {}
     layer(const layer_params & params)
 	   : bias(nullptr),
           weights(nullptr),
@@ -43,12 +41,7 @@ struct layer{
         std::normal_distribution<> nd(0, 1);
 
         // std::cout << "Creating new layer: " << this << std::endl;
-	   input = params.input_channels
-			  * params.input_shape
-			  * params.input_shape;
-	   output = params.output_channels
-	 		   * params.output_shape
-		 	   * params.output_shape;
+	   //
 	   switch (params.type) 
 	   {
 	       case INNER_PRODUCT:
@@ -146,19 +139,11 @@ struct layer{
     }
 
     layer(const layer & other)
-        : input(other.input),
-          output(other.output),
-          bias(new float [output]),
-          weights(new float [input * output]) {
+    {
         std::cout << "Copy constructor!" << std::endl;
-
-        std::copy(other.bias, other.bias + output, bias);
-        std::copy(other.weights, other.weights + output, weights);
     }
 
     int channels;
-    int input;
-    int output;
     int shape;
     int type;
     bool relu;
@@ -188,28 +173,15 @@ struct network{
     int num_layers;
 };
 
-// Deprecated
 void print(const network & net)
 {
     for (int i = 0; i < net.num_layers; ++i) {
-        std::cout << net.layers[i]->input << "x"
-                  << net.layers[i]->output << " weights:"
-                  << std::endl;
-        for (int x = 0; x < net.layers[i]->input; ++x) {
-            for (int y = 0; y < net.layers[i]->output; ++y) {
-                std::cout << net.layers[i]->weights[x * net.layers[i]->output + y]
-                          << " ";
-            }
-            std ::cout << std::endl;
-        }
-
-        std::cout << net.layers[i]->output << " bias:"
-                  << std::endl;
-        for (int y = 0; y < net.layers[i]->output; ++y) {
-            std::cout << net.layers[i]->bias[y]
-                      << " ";
-        }
-        std ::cout << std::endl << std::endl;
+        std::cout << "Type: " << net.layers[i]->type << std::endl;
+        std::cout << "Shape: "
+		  	   << net.layers[i]->channels << "x"
+		  	   << net.layers[i]->shape << "x"
+			   << net.layers[i]->shape
+			   << std::endl;
     }
 }
 
@@ -236,14 +208,14 @@ void inner_product(layer * input, layer * output)
     }
 }
 
-void max_pool(layer * current_layer, float * input)
+void max_pool(layer * input, layer * output)
 {
     // Hardcode to 2x2 for now...
     //
     // return i > j? (i > k? i: k): (j > k? j: k);
 }
 
-void convolution(layer * current_layer, float * input)
+void convolution(layer * input, layer * output)
 {
 
 }
@@ -336,6 +308,7 @@ int main()
     net_spec[5].output_channels = 4;
 
     network net = network(net_spec, 6);
+    print(net);
 
     int class_ = forward(net);
     std::cout << "Classification: " << class_ << std::endl << std::endl;
