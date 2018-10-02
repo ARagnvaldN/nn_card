@@ -15,6 +15,7 @@ static const int MAX_POOL 	 = 2;
 static const int DATA 		 = 3;
 
 struct layer_params {
+    float * data;
     int input_channels;
     int output_channels;
     int input_shape;
@@ -30,11 +31,15 @@ struct layer{
     layer(const layer_params & params)
 	   : bias(nullptr),
           weights(nullptr),
+          activations(nullptr),
+		shape(params.output_shape),
+		channels(params.output_channels),
 		type(params.type),
 		relu(params.relu)
     {
         std::random_device rd {};
         std::mt19937 gen{rd()};
+        //std::mt19937 gen{0};
         std::normal_distribution<> nd(0, 1);
 
         // std::cout << "Creating new layer: " << this << std::endl;
@@ -58,6 +63,12 @@ struct layer{
 			    weights = new float [n_weights];
 			    for (int i = 0; i < n_weights; ++i) {
 				   weights[i] = nd(gen);
+			    }
+
+			    int n_activations = params.output_channels;
+			    activations = new float [n_activations];
+			    for (int i = 0; i < n_activations; ++i) {
+				   activations[i] = 0.0f;
 			    }
 			}
 			break;
@@ -85,15 +96,41 @@ struct layer{
 			    for (int i = 0; i < n_weights; ++i) {
 				   weights[i] = nd(gen);
 			    }
+
+			    int n_activations = params.output_channels
+				   				* (params.input_shape
+								   - (params.kernel_size - 1))
+				   				* (params.input_shape
+								   - (params.kernel_size - 1));
+			    activations = new float [n_activations];
+			    for (int i = 0; i < n_activations; ++i) {
+				   activations[i] = 0.0f;
+			    }
 			}
 			break;
 
 		  case MAX_POOL:
-			// Pooling layers have no weights!
+			// Pooling layers have no weights or bias!
+			{
+			    int n_activations = params.input_channels
+			    				     * (params.input_shape / 2)
+				    				* (params.input_shape / 2);
+			    activations = new float [n_activations];
+			    for (int i = 0; i < n_activations; ++i) {
+				   activations[i] = 0.0f;
+			    }
+			}
 			break;
 
 		  case DATA:
-			// Data layers have no weights!
+			// Data layers have no weights or bias!
+			{
+			    int n_activations = params.input_channels
+			       			     * params.input_shape
+							     * params.input_shape;
+			    activations = new float [n_activations];
+        		    std::copy(params.data, params.data + n_activations, activations);
+			}
 			break;
 	   }
     }
@@ -102,12 +139,12 @@ struct layer{
         // std::cout << "Layer destructor: " << this << std::endl;
         // std::cout << "Bias: " <<  bias << std::endl;
         // std::cout << "Weights: " <<  weights << std::endl;
-	   // if type == CONV || type == INNER
-        if (bias != nullptr)
-            delete[] bias;
-        if (weights != nullptr)
-            delete[] weights;
+	   
+	   delete[] bias;
+	   delete[] weights;
+	   delete[] activations;
     }
+
     layer(const layer & other)
         : input(other.input),
           output(other.output),
@@ -119,14 +156,15 @@ struct layer{
         std::copy(other.weights, other.weights + output, weights);
     }
 
+    int channels;
     int input;
     int output;
-    int channels;
     int shape;
     int type;
     bool relu;
     float * bias;
     float * weights;
+    float * activations;
 };
 
 struct network{
@@ -150,6 +188,7 @@ struct network{
     int num_layers;
 };
 
+// Deprecated
 void print(const network & net)
 {
     for (int i = 0; i < net.num_layers; ++i) {
@@ -174,23 +213,25 @@ void print(const network & net)
     }
 }
 
-void inner_product(int input_size, int output_size, float * input, float * output,
-	   		    float * weights, float * bias, bool relu)
+void inner_product(layer * input, layer * output)
 {
-    for (int outer = 0; outer < output_size; ++outer) {
+    for (int outer = 0; outer < output->channels; ++outer) {
 
 	   float sum = 0;
-	   for (int inner = 0; inner < input_size; ++inner) {
+	   for (int inner = 0; inner < input->channels; ++inner) {
 
-		  sum += input[inner] * weights[inner * output_size + outer];
+		  sum += input->activations[inner]
+			 	* output->weights[inner * output->channels + outer];
 	   }
 
 	   // Apply bias and ReLU
 	   // Hinge on activation type and bias type
-	   if (relu) {
-		  output[outer] = std::max(sum + bias[outer], 0.0f);
+	   float result = sum + output->bias[outer];
+	   if (output->relu) {
+		  if (result > 0.0f)
+		  	 output->activations[outer] = result;
 	   } else {
-		  output[outer] = sum + bias[outer];
+		  output->activations[outer] = sum + output->bias[outer];
 	   }
     }
 }
@@ -207,39 +248,24 @@ void convolution(layer * current_layer, float * input)
 
 }
 
-int forward(float * input, int input_size, const network & net)
+int forward(const network & net)
 {
 
-    if (net.layers[0]->input != input_size) {
-        std::cout << "Input data is wrong size (" << input_size
-                  << " vs. " << net.layers[0]->input 
-                  << ")" << std::endl;
+    if (net.layers[0]->type != DATA) {
+        std::cout << "First layer is not a DATA layer!" << std::endl;
         return -1;
     } 
 
-    // Allocate memory
-    float ** activations = new float *[net.num_layers + 1];
-    activations[0] = input;
-
     // For each layer
-    for (int i = 0; i < net.num_layers; ++i) {
+    for (int i = 1; i < net.num_layers; ++i) {
 
+	   layer * last_layer = net.layers[i - 1];
 	   layer * current_layer = net.layers[i];
-
-	   // Allocate memory for activations
-	   int output_size = current_layer->output;
-	   activations[i + 1] = new float [output_size];
-	   for (int l = 0; l < output_size; ++l) {
-		  activations[i + 1][l] = 0.0f;
-	   }
         
         // Calculate the dot product
 	   if (current_layer->type == INNER_PRODUCT) {
 
-		  inner_product(current_layer->input, current_layer->output,
-					 activations[i], activations[i + 1],
-					 current_layer->weights, current_layer->bias,
-					 current_layer->relu);
+		inner_product(last_layer, current_layer);
 
 	   } else if (current_layer->type == CONVOLUTIONAL) {
 	   	  // TODO: Convolutional logic
@@ -250,48 +276,44 @@ int forward(float * input, int input_size, const network & net)
 
         // Print activations
         std::cout << std::endl << "Activations: ";
-        for (int j = 0; j < output_size; ++j) {
-            std::cout << activations[i + 1][j] << " ";
+        for (int j = 0; j < current_layer->channels; ++j) {
+            std::cout << current_layer->activations[j] << " ";
         }
         std::cout << std::endl << std::endl;
     }
 
     // ArgMax of final activation
     int last = net.num_layers - 1;
-    float max = activations[last][0];
+    float max = net.layers[last]->activations[0];
     int argmax = 0;
-    for (int i = 1; i < net.layers[last]->output; ++i) {
-        if (activations[last][i] > max) {
+    for (int i = 1; i < net.layers[last]->channels; ++i) {
+        if (net.layers[last]->activations[i] > max) {
             argmax = i;
-            max = activations[last][i];
+            max = net.layers[last]->activations[i];
         }
     }
-
-    // Done with activations, but skip input data!
-    for (int i = 1; i < last; ++i)
-        delete [] activations[i];
 
     return argmax;
 }
 
 int main()
 {
-    int layers[6] = {10, 8, 5, 5, 5, 4};
-    layer_params net_spec[5] = {};
-    net_spec[0].input_shape = 1;
-    net_spec[0].input_channels = 10;
+    float data [10] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
+
+    layer_params net_spec[6] = {};
     net_spec[0].output_shape = 1;
-    net_spec[0].output_channels = 8;
-    net_spec[0].relu = true;
+    net_spec[0].output_channels = 10;
+    net_spec[0].data = data;
+    net_spec[0].type = DATA;
 
     net_spec[1].input_shape = 1;
-    net_spec[1].input_channels = 8;
+    net_spec[1].input_channels = 10;
     net_spec[1].output_shape = 1;
-    net_spec[1].output_channels = 5;
+    net_spec[1].output_channels = 8;
     net_spec[1].relu = true;
 
     net_spec[2].input_shape = 1;
-    net_spec[2].input_channels = 5;
+    net_spec[2].input_channels = 8;
     net_spec[2].output_shape = 1;
     net_spec[2].output_channels = 5;
     net_spec[2].relu = true;
@@ -305,15 +327,17 @@ int main()
     net_spec[4].input_shape = 1;
     net_spec[4].input_channels = 5;
     net_spec[4].output_shape = 1;
-    net_spec[4].output_channels = 4;
-    net_spec[4].relu = false;
+    net_spec[4].output_channels = 5;
+    net_spec[4].relu = true;
 
-    float data [10] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
+    net_spec[5].input_shape = 1;
+    net_spec[5].input_channels = 5;
+    net_spec[5].output_shape = 1;
+    net_spec[5].output_channels = 4;
 
-    network net = network(net_spec, 5);
-    // print(net);
+    network net = network(net_spec, 6);
 
-    int class_ = forward(data, 10, net);
+    int class_ = forward(net);
     std::cout << "Classification: " << class_ << std::endl << std::endl;
 
     return 0;
