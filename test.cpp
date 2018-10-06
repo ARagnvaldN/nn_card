@@ -5,6 +5,7 @@
 #include <random>
 
 // NxKxHxW
+// TODO: Allow preallocating bias and weights
 // TODO: Load weights
 // TODO: Format for reading network (LOW)
 
@@ -46,6 +47,8 @@ struct layer{
 	   {
 	       case INNER_PRODUCT:
 			{
+			    shape = 1;
+
 			    int n_bias = params.input_channels;
 			    bias = new float [n_bias];
 			    for (int i = 0; i < n_bias; ++i) {
@@ -67,14 +70,9 @@ struct layer{
 			break;
 		  
 		  case CONVOLUTIONAL:
-			//INPUT_channels x OUTPUT_channels x HEIGHT x WIDTH
-			// x x x o o
-			// x x x o o
-			// x x x o o
-			// o o o o o
-			// o o o o o
-			//
 			{
+			    shape = params.input_shape - (params.kernel_size - 1);
+
 			    int n_bias = params.input_channels;
 			    bias = new float [n_bias];
 			    for (int i = 0; i < n_bias; ++i) {
@@ -105,6 +103,9 @@ struct layer{
 		  case MAX_POOL:
 			// Pooling layers have no weights or bias!
 			{
+			    shape = params.input_shape / 2;
+			    channels = params.input_channels;
+
 			    int n_activations = params.input_channels
 			    				     * (params.input_shape / 2)
 				    				* (params.input_shape / 2);
@@ -217,7 +218,41 @@ void max_pool(layer * input, layer * output)
 
 void convolution(layer * input, layer * output)
 {
+    // input: INPUT_channels x INPUT_height x INPUT_width
+    // output: OUTPUT_channels x OUTPUT_height x OUTPUT_width
+    // weights: INPUT_channels x OUTPUT_channels x kernel_HEIGHT x kernel_WIDTH
+    //
+    // x x x i i  i i i i i  i i i i i
+    // x x x i i  i i i i i  i i i i i
+    // x x x i i  i i i i i  i i i i i
+    // i i i i i  i i i i i  i i i i i
+    // i i i i i  i i i i i  i i i i i
+    //
+    // x o o  o o o  o o o  o o o
+    // o o o  o o o  o o o  o o o
+    // o o o  o o o  o o o  o o o
+    //
+    //  for c_outer in output_channels:
+    //      for h_outer in output_height:
+    //          for w_outer in output_width:
+    //      
+    //      		for c_inner in input_channels:
+    //      		    
+    //      		    sum = 0;
+    //      		    for h_inner in input_height:
+    //      		        for w_inner in input_width:
+    //                  
+    //			    
+    //
+    //	              output->activation[c_outer * output_height * output_width
+    //	              			         + h_outer * output_width
+    //	              			         + w_outer] += sum;
+    //
+    
+    
 
+    //kernel_size = 5;
+    
 }
 
 int forward(const network & net)
@@ -237,13 +272,16 @@ int forward(const network & net)
         // Calculate the dot product
 	   if (current_layer->type == INNER_PRODUCT) {
 
-		inner_product(last_layer, current_layer);
+		  inner_product(last_layer, current_layer);
 
 	   } else if (current_layer->type == CONVOLUTIONAL) {
-	   	  // TODO: Convolutional logic
-		  //
+
+		  convolution(last_layer, current_layer);
+
 	   } else if (current_layer->type == MAX_POOL) {
-		  // TODO: Max pooling logic
+
+		  max_pool(last_layer, current_layer);
+
 	   }
 
         // Print activations
@@ -270,6 +308,7 @@ int forward(const network & net)
 
 int main()
 {
+    {
     float data [10] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
 
     layer_params net_spec[6] = {};
@@ -312,6 +351,79 @@ int main()
 
     int class_ = forward(net);
     std::cout << "Classification: " << class_ << std::endl << std::endl;
+    }
 
+    {
+    float data [784] = 
+    {
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    };
+	
+    layer_params net_spec[7] = {};
+    net_spec[0].type = DATA;
+    net_spec[0].data = data;
+    net_spec[0].output_shape = 28;
+    net_spec[0].output_channels = 1;
+
+    net_spec[1].type = CONVOLUTIONAL;
+    net_spec[1].input_shape = 28;
+    net_spec[1].input_channels = 1;
+    net_spec[1].kernel_size = 5;
+    net_spec[1].output_channels = 20;
+
+    net_spec[2].type = MAX_POOL;
+    net_spec[2].kernel_size = 2;
+    net_spec[2].input_channels = 20;
+    net_spec[2].input_shape = 24;
+
+    net_spec[3].type = CONVOLUTIONAL;
+    net_spec[3].input_channels = 20;
+    net_spec[3].input_shape = 12;
+    net_spec[3].kernel_size = 5;
+    net_spec[3].output_channels = 50;
+
+    net_spec[4].type = MAX_POOL;
+    net_spec[4].kernel_size = 2;
+    net_spec[4].input_channels = 50;
+    net_spec[4].input_shape = 8;
+
+    net_spec[5].type = INNER_PRODUCT;
+    net_spec[5].output_channels = 500;
+    net_spec[5].relu = true;
+
+    net_spec[6].type = INNER_PRODUCT;
+    net_spec[6].output_channels = 10;
+
+    network net = network(net_spec, 7);
+    print(net);
+
+    }
     return 0;
 }
