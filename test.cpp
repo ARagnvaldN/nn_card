@@ -34,7 +34,8 @@ struct layer{
 		shape(params.output_shape),
 		channels(params.output_channels),
 		type(params.type),
-		relu(params.relu)
+		relu(params.relu),
+		kernel_size(params.kernel_size)
     {
         std::random_device rd {};
         std::mt19937 gen{rd()};
@@ -52,7 +53,7 @@ struct layer{
 			    int n_bias = params.input_channels;
 			    bias = new float [n_bias];
 			    for (int i = 0; i < n_bias; ++i) {
-				   bias[i] = nd(gen);
+				   bias[i] = 0.f;  // nd(gen);
 			    }
 
 			    int n_weights = params.input_channels * params.output_channels;
@@ -73,10 +74,10 @@ struct layer{
 			{
 			    shape = params.input_shape - (params.kernel_size - 1);
 
-			    int n_bias = params.input_channels;
+			    int n_bias = params.output_channels;
 			    bias = new float [n_bias];
 			    for (int i = 0; i < n_bias; ++i) {
-				   bias[i] = nd(gen);
+				   bias[i] = 0;  // nd(gen);
 			    }
 
 			    int n_weights = params.input_channels
@@ -106,9 +107,7 @@ struct layer{
 			    shape = params.input_shape / 2;
 			    channels = params.input_channels;
 
-			    int n_activations = params.input_channels
-			    				     * (params.input_shape / 2)
-				    				* (params.input_shape / 2);
+			    int n_activations = params.input_channels * shape * shape;
 			    activations = new float [n_activations];
 			    for (int i = 0; i < n_activations; ++i) {
 				   activations[i] = 0.0f;
@@ -119,9 +118,9 @@ struct layer{
 		  case DATA:
 			// Data layers have no weights or bias!
 			{
-			    int n_activations = params.input_channels
-			       			     * params.input_shape
-							     * params.input_shape;
+			    int n_activations = params.output_channels
+			       			     * params.output_shape
+							     * params.output_shape;
 			    activations = new float [n_activations];
         		    std::copy(params.data, params.data + n_activations, activations);
 			}
@@ -146,6 +145,7 @@ struct layer{
 
     int channels;
     int shape;
+    int kernel_size;
     int type;
     bool relu;
     float * bias;
@@ -213,6 +213,35 @@ void max_pool(layer * input, layer * output)
 {
     // Hardcode to 2x2 for now...
     //
+    // x x i i  i i i i  i i i i
+    // x x i i  i i i i  i i i i
+    // i i i i  i i i i  i i i i
+    // i i i i  i i i i  i i i i
+    //
+    int kernel_size = 2;
+    for (int c_out = 0; c_out < output->channels; ++c_out) {
+	   for (int h_out = 0; h_out < output->shape; ++h_out) {
+		  for (int w_out = 0; w_out < output->shape; ++w_out) {
+
+			 // Loop over inside of kernel
+			 float max = -10000;
+			 for (int y_kernel = 0; y_kernel < kernel_size; ++y_kernel) {
+				for (int x_kernel = 0; x_kernel < kernel_size; ++x_kernel) {
+				    float current_val = input->activations[c_out * input->shape
+					   								    * input->shape
+								   				   + h_out * kernel_size
+												   		 * input->shape
+								   				   + w_out * kernel_size];
+				    if (current_val > max)
+					   max = current_val;
+				}
+			 }
+			 output->activations[c_out * output->shape * output->shape
+							 + h_out * output->shape
+							 + w_out] = max;
+		  }
+	   }
+    }
     // return i > j? (i > k? i: k): (j > k? j: k);
 }
 
@@ -221,6 +250,7 @@ void convolution(layer * input, layer * output)
     // input: INPUT_channels x INPUT_height x INPUT_width
     // output: OUTPUT_channels x OUTPUT_height x OUTPUT_width
     // weights: INPUT_channels x OUTPUT_channels x kernel_HEIGHT x kernel_WIDTH
+    // bias: OUTPUT_channels
     //
     // x x x i i  i i i i i  i i i i i
     // x x x i i  i i i i i  i i i i i
@@ -232,26 +262,44 @@ void convolution(layer * input, layer * output)
     // o o o  o o o  o o o  o o o
     // o o o  o o o  o o o  o o o
     //
-    //  for c_outer in output_channels:
-    //      for h_outer in output_height:
-    //          for w_outer in output_width:
-    //      
-    //      		for c_inner in input_channels:
-    //      		    
-    //      		    sum = 0;
-    //      		    for h_inner in input_height:
-    //      		        for w_inner in input_width:
-    //                  
-    //			    
-    //
-    //	              output->activation[c_outer * output_height * output_width
-    //	              			         + h_outer * output_width
-    //	              			         + w_outer] += sum;
-    //
-    
-    
+    int kernel_size = output->kernel_size;
 
-    //kernel_size = 5;
+    //for (int j = 0; j < 28; ++j) {
+    //    for (int i = 0; i < 1; ++i) {
+    // 	  std::cout << "(" << i << ", " << j << "): "
+    // 		 	  << input->activations[j * 28 + i] << std::endl;
+    //    }
+    //}
+    for (int c_outer = 0; c_outer < output->channels; ++c_outer) {
+        for (int h_outer = 0; h_outer < output->shape; ++h_outer) {
+        	  for (int w_outer = 0; w_outer < output->shape; ++w_outer) {
+        
+        		float sum = 0.f;
+        		for (int c_inner = 0; c_inner < input->channels; ++c_inner) {
+    
+      		    for (int kernel_y = 0; kernel_y < kernel_size; ++kernel_y) {
+    				    for (int kernel_x = 0; kernel_x < kernel_size; ++kernel_x) {
+    			    	    
+    			    	    sum += input->activations[c_inner * input->shape * input->shape
+    			    	    					    + (h_outer + kernel_y) * input->shape
+    			    	    					    + w_outer + kernel_x]
+    			    	    		  * output->weights[c_inner * output->channels
+    			    	    		  					   * kernel_size * kernel_size
+    			    	    		  				+ c_outer * kernel_size * kernel_size
+    			    	    		  				+ kernel_y * kernel_size
+    			    	    		  				+ kernel_x];
+    
+   			        }
+      		    }
+			    //std::cout << "Sum: " << sum << std::endl;
+			    //std::cout << "Bias: " << output->bias[c_outer] << std::endl;
+                   output->activations[c_outer * output->shape * output->shape
+                     		         + h_outer * output->shape
+                   	     	         + w_outer] = sum + output->bias[c_outer];
+			}
+		  }
+	   }
+    }
     
 }
 
@@ -262,6 +310,13 @@ int forward(const network & net)
         std::cout << "First layer is not a DATA layer!" << std::endl;
         return -1;
     } 
+
+    //for (int j = 0; j < 28; ++j) {
+    //    for (int i = 0; i < 1; ++i) {
+    // 	  std::cout << "(" << i << ", " << j << "): "
+    // 		 	  << net.layers[0]->activations[j * 28 + i] << std::endl;
+    //    }
+    //}
 
     // For each layer
     for (int i = 1; i < net.num_layers; ++i) {
@@ -385,7 +440,8 @@ int main()
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
     };
-	
+
+    
     layer_params net_spec[7] = {};
     net_spec[0].type = DATA;
     net_spec[0].data = data;
@@ -424,6 +480,8 @@ int main()
     network net = network(net_spec, 7);
     print(net);
 
+    int class_ = forward(net);
+    std::cout << "Classification: " << class_ << std::endl << std::endl;
     }
     return 0;
 }
