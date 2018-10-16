@@ -50,7 +50,7 @@ struct layer{
 			{
 			    shape = 1;
 
-			    int n_bias = params.input_channels;
+			    int n_bias = channels;
 			    bias = new float [n_bias];
 			    for (int i = 0; i < n_bias; ++i) {
 				   bias[i] = 0.f;  // nd(gen);
