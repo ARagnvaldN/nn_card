@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <random>
+#include <fstream>
 
 // NxKxHxW
 // TODO: Allow preallocating bias and weights
@@ -13,6 +14,10 @@ static const int INNER_PRODUCT = 0;
 static const int CONVOLUTIONAL = 1;
 static const int MAX_POOL 	 = 2;
 static const int DATA 		 = 3;
+static const char* type2string [4] {"Inner product",
+    						      "Convolution",
+						      "Max pooling",
+						      "Data"};
 
 struct layer_params {
     float * data;
@@ -177,7 +182,7 @@ struct network{
 void print(const network & net)
 {
     for (int i = 0; i < net.num_layers; ++i) {
-        std::cout << "Type: " << net.layers[i]->type << std::endl;
+        std::cout << "Type: " << type2string[net.layers[i]->type] << std::endl;
         std::cout << "Shape: "
 		  	   << net.layers[i]->channels << "x"
 		  	   << net.layers[i]->shape << "x"
@@ -358,56 +363,35 @@ int forward(const network & net)
         }
     }
 
+
     return argmax;
+}
+
+int write_layer_spec(const char* file_name, const layer_params * net_spec, int * size) {
+
+    std::ofstream out(file_name);
+    out << *size;
+    for (int i = 0; i < *size; ++i) {
+        out.write(reinterpret_cast<const char *>(& net_spec[i]), sizeof(layer_params));
+    }
+
+    std::cout << "Done writing " << *size << " layers!" << std::endl;
+    return true;
+}
+int read_layer_spec(const char* file_name, layer_params * net_spec, int * size) {
+
+    std::ifstream in(file_name);
+    in >> *size;
+    for (int i = 0; i < *size; ++i) {
+        in.read(reinterpret_cast<char *>(& net_spec[i]), sizeof(layer_params));
+    }
+
+    std::cout << "Done reading " << *size << " layers!" << std::endl;
+    return true;
 }
 
 int main()
 {
-    {
-    float data [10] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
-
-    layer_params net_spec[6] = {};
-    net_spec[0].output_shape = 1;
-    net_spec[0].output_channels = 10;
-    net_spec[0].data = data;
-    net_spec[0].type = DATA;
-
-    net_spec[1].input_shape = 1;
-    net_spec[1].input_channels = 10;
-    net_spec[1].output_shape = 1;
-    net_spec[1].output_channels = 8;
-    net_spec[1].relu = true;
-
-    net_spec[2].input_shape = 1;
-    net_spec[2].input_channels = 8;
-    net_spec[2].output_shape = 1;
-    net_spec[2].output_channels = 5;
-    net_spec[2].relu = true;
-
-    net_spec[3].input_shape = 1;
-    net_spec[3].input_channels = 5;
-    net_spec[3].output_shape = 1;
-    net_spec[3].output_channels = 5;
-    net_spec[3].relu = true;
-
-    net_spec[4].input_shape = 1;
-    net_spec[4].input_channels = 5;
-    net_spec[4].output_shape = 1;
-    net_spec[4].output_channels = 5;
-    net_spec[4].relu = true;
-
-    net_spec[5].input_shape = 1;
-    net_spec[5].input_channels = 5;
-    net_spec[5].output_shape = 1;
-    net_spec[5].output_channels = 4;
-
-    network net = network(net_spec, 6);
-    print(net);
-
-    int class_ = forward(net);
-    std::cout << "Classification: " << class_ << std::endl << std::endl;
-    }
-
     {
     float data [784] = 
     {
@@ -442,6 +426,7 @@ int main()
     };
 
     
+    int num_layers = 7;
     layer_params net_spec[7] = {};
     net_spec[0].type = DATA;
     net_spec[0].data = data;
@@ -477,7 +462,19 @@ int main()
     net_spec[6].type = INNER_PRODUCT;
     net_spec[6].output_channels = 10;
 
-    network net = network(net_spec, 7);
+    std::cout << "Writing" << std::endl;
+    write_layer_spec("lenet.bin", net_spec, &num_layers);
+
+    net_spec[1].type = CONVOLUTIONAL;
+    net_spec[1].input_shape = 0;
+    net_spec[1].input_channels = 0;
+    net_spec[1].kernel_size = 0;
+    net_spec[1].output_channels = 0;
+
+    std::cout << "reading" << std::endl;
+    read_layer_spec("lenet.bin", net_spec, &num_layers);
+
+    network net = network(net_spec, num_layers);
     print(net);
 
     int class_ = forward(net);
