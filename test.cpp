@@ -20,15 +20,23 @@ static const char* type2string [4] {"Inner product",
 						      "Data"};
 
 struct layer_params {
-    float * data;
+
     int input_channels;
     int output_channels;
     int input_shape;
     int output_shape;
-    int type;
+
+    int channels;
+    int shape;
     int kernel_size;
+    int type;
     int stride;
     bool relu;
+
+    float * bias;
+    float * weights;
+    float * activations;
+    float * data;
 };
 
 struct layer{
@@ -178,6 +186,99 @@ struct network{
     layer** layers;
     int num_layers;
 };
+
+void init_layer(layer_params * previous, layer_params * l) {
+
+    std::random_device rd {};
+    std::mt19937 gen{rd()};
+    //std::mt19937 gen{0};
+    std::normal_distribution<> nd(0, 1);
+
+    // std::cout << "Creating new layer: " << this << std::endl;
+    //
+    switch (l->type) 
+    {
+	   case INNER_PRODUCT:
+		 {
+			l->shape = 1;
+
+			int n_bias = l->channels;
+			l->bias = new float [n_bias];
+			for (int i = 0; i < n_bias; ++i) {
+			    l->bias[i] = 0.f;  // nd(gen);
+			}
+
+			int n_weights = previous->channels * l->channels;
+			l->weights = new float [n_weights];
+			for (int i = 0; i < n_weights; ++i) {
+			    l->weights[i] = nd(gen);
+			}
+
+			int n_activations = l->channels;
+			l->activations = new float [n_activations];
+			for (int i = 0; i < n_activations; ++i) {
+			    l->activations[i] = 0.0f;
+			}
+		 }
+		 break;
+	   
+	   case CONVOLUTIONAL:
+		 {
+			l->shape = previous->shape - (l->kernel_size - 1);
+
+			int n_bias = l->channels;
+			l->bias = new float [n_bias];
+			for (int i = 0; i < n_bias; ++i) {
+			    l->bias[i] = 0;  // nd(gen);
+			}
+
+			int n_weights = previous->channels
+					   * l->channels
+					   * l->kernel_size
+					   * l->kernel_size;
+			l->weights = new float [n_weights];
+			for (int i = 0; i < n_weights; ++i) {
+			    l->weights[i] = nd(gen);
+			}
+
+			int n_activations = l->channels
+							 * (previous->shape
+							    - (l->kernel_size - 1))
+							 * (l->shape
+							    - (l->kernel_size - 1));
+			l->activations = new float [n_activations];
+			for (int i = 0; i < n_activations; ++i) {
+			    l->activations[i] = 0.0f;
+			}
+		 }
+		 break;
+
+	   case MAX_POOL:
+		 // Pooling layers have no weights or bias!
+		 {
+			l->shape = previous->shape / 2;
+			l->channels = previous->channels;
+
+			int n_activations = previous->channels * l->shape * l->shape;
+			l->activations = new float [n_activations];
+			for (int i = 0; i < n_activations; ++i) {
+			    l->activations[i] = 0.0f;
+			}
+		 }
+		 break;
+
+	   case DATA:
+		 // Data layers have no weights or bias!
+		 {
+			int n_activations = l->channels
+							 * l->shape
+							 * l->shape;
+			l->activations = new float [n_activations];
+			std::copy(l->data, l->data + n_activations, l->activations);
+		 }
+		 break;
+    }
+}
 
 void print(const network & net)
 {
@@ -345,11 +446,26 @@ int forward(const network & net)
 	   }
 
         // Print activations
-        std::cout << std::endl << "Activations: ";
-        for (int j = 0; j < current_layer->channels; ++j) {
-            std::cout << current_layer->activations[j] << " ";
+	   std::cout << type2string[current_layer->type] << " "
+		  	   << current_layer->channels << "x"
+			   << current_layer->shape << "x"
+			   << current_layer->shape;
+        std::cout << std::endl << "Activations: " << std::endl;
+	   if (current_layer->type == CONVOLUTIONAL || current_layer->type == MAX_POOL) {
+        for (int c = 0; c < 1; ++c) {
+		  for (int h = 0; h < current_layer->shape; ++h) {
+			 for (int w = 0; w < current_layer->shape; ++w) {
+			    std::cout << current_layer->activations[c * current_layer->shape 
+												 * current_layer->shape
+											    + h * current_layer->shape
+											    + w] << " ";
+			 }
+			 std::cout << std::endl;
+		  }
+		  std::cout << std::endl;
         }
         std::cout << std::endl << std::endl;
+    }
     }
 
     // ArgMax of final activation
@@ -408,7 +524,7 @@ int main()
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
@@ -479,6 +595,10 @@ int main()
 
     int class_ = forward(net);
     std::cout << "Classification: " << class_ << std::endl << std::endl;
+
+	init_layer(NULL, &net_spec[0]);
+	init_layer(&net_spec[0], &net_spec[1]);
+
     }
     return 0;
 }
