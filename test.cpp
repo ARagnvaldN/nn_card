@@ -65,7 +65,10 @@ void init_layer(layer_params * previous, layer_params * l) {
 			l->shape = 1;
 
 			l->n_bias = l->channels;
-			l->n_weights = previous->channels * l->channels;
+			l->n_weights = previous->channels 
+			    			* previous->shape 
+						* previous->shape
+						* l->channels;
 			l->n_activations = l->channels;
 
 			if (l->data == nullptr) {
@@ -168,6 +171,7 @@ void init_layer(layer_params * previous, layer_params * l) {
 void print(layer_params * network, int size)
 {
     for (int i = 0; i < size; ++i) {
+	   layer_params * current_layer = network + i;
         std::cout << "Type: " << type2string[network[i].type] << std::endl;
         std::cout << "Shape: "
 		  	   << network[i].channels << "x"
@@ -175,16 +179,37 @@ void print(layer_params * network, int size)
 			   << network[i].shape
 			   << std::endl;
 	   if (network[i].weights) {
+		     std::cout << "n_weights: " << network[i].n_weights << std::endl;
 			std::cout << "weights: ";
 			for(int j = 0; j < 10; ++j) {
 				std::cout << network[i].weights[j] << " ";
 			}
 			std::cout << std::endl;
+		     std::cout << "n_bias: " << network[i].n_bias << std::endl;
 			std::cout << "bias: ";
 			for(int j = 0; j < 10; ++j) {
 				std::cout << network[i].bias[j] << " ";
 			}
 			std::cout << std::endl;
+	   }
+
+	   // Print activations
+
+	   std::cout << std::endl << "Activations: " << std::endl;
+	   if (current_layer->type == CONVOLUTIONAL || current_layer->type == MAX_POOL) {
+	   for (int c = 0; c < 1; ++c) {
+		  for (int h = 0; h < current_layer->shape; ++h) {
+			 for (int w = 0; w < current_layer->shape; ++w) {
+			    std::cout << current_layer->activations[c * current_layer->shape 
+												 * current_layer->shape
+											    + h * current_layer->shape
+											    + w] << " ";
+			 }
+			 std::cout << std::endl;
+		  }
+		  std::cout << std::endl;
+	   }
+	   std::cout << std::endl << std::endl;
 	   }
     }
 }
@@ -227,14 +252,16 @@ void max_pool(layer_params * input, layer_params * output)
 		  for (int w_out = 0; w_out < output->shape; ++w_out) {
 
 			 // Loop over inside of kernel
-			 float max = -10000;
+			 float max = -10000.0f;
 			 for (int y_kernel = 0; y_kernel < kernel_size; ++y_kernel) {
 				for (int x_kernel = 0; x_kernel < kernel_size; ++x_kernel) {
 				    float current_val = input->activations[c_out * input->shape
 					   								    * input->shape
-								   				   + h_out * kernel_size
+								   				   + (h_out * kernel_size
+												      + y_kernel)
 												   		 * input->shape
-								   				   + w_out * kernel_size];
+								   				   + w_out * kernel_size
+												   + x_kernel];
 				    if (current_val > max)
 					   max = current_val;
 				}
@@ -345,32 +372,6 @@ int forward(layer_params * last_layer, layer_params * current_layer)
 
     }
 
-    // Print activations
-    std::cout << type2string[current_layer->type] << " "
-		    << current_layer->channels 		<< "x"
-		    << current_layer->shape 			<< "x"
-		    << current_layer->shape;
-
-    std::cout << "n_bias: " 		<< current_layer->n_bias 		<< std::endl
-		    << "n_weights: " 	<< current_layer->n_weights 		<< std::endl
-		    << "n_activations: " << current_layer->n_activations 	<< std::endl;
-
-    std::cout << std::endl << "Activations: " << std::endl;
-    if (current_layer->type == CONVOLUTIONAL || current_layer->type == MAX_POOL) {
-    for (int c = 0; c < 1; ++c) {
-	   for (int h = 0; h < current_layer->shape; ++h) {
-		  for (int w = 0; w < current_layer->shape; ++w) {
-			std::cout << current_layer->activations[c * current_layer->shape 
-											  * current_layer->shape
-											+ h * current_layer->shape
-											+ w] << " ";
-		  }
-		  std::cout << std::endl;
-	   }
-	   std::cout << std::endl;
-    }
-    std::cout << std::endl << std::endl;
-    }
     return 0;
 
 }
@@ -526,13 +527,13 @@ int main()
         last = &net_spec[i];
     }
 
-    // Print netspec
-    print(net_spec, 7);
-
     // Forward all layers
     for (int i = 0; i < num_layers - 1; ++i) {
 	   forward(&net_spec[i], &net_spec[i+1]);
     }
+
+    // Print netspec
+    print(net_spec, 7);
 
     // ArgMax of final activation
     int idx = num_layers - 1;
