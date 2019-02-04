@@ -5,11 +5,6 @@
 #include <random>
 #include <fstream>
 
-// NxKxHxW
-// TODO: Allow preallocating bias and weights
-// TODO: Load weights
-// TODO: Format for reading network (LOW)
-
 static const int INNER_PRODUCT = 0;
 static const int CONVOLUTIONAL = 1;
 static const int MAX_POOL 	 = 2;
@@ -19,7 +14,7 @@ static const char* type2string [4] {"Inner product",
 						      "Max pooling",
 						      "Data"};
 
-struct layer_params {
+struct layer {
 
     int channels;
     int shape;
@@ -38,26 +33,21 @@ struct layer_params {
     int n_activations;
 };
 
-void free_layer(layer_params * layer) {
+void free_layer(layer * l) {
 
-    //std::cout << "Freeing layer: " << layer << std::endl;
-    //std::cout << layer->bias << std::endl;
-    //delete[] layer->bias;
-    //std::cout << layer->weights << std::endl;
-    //delete[] layer->weights;
-    //std::cout << layer->activations << std::endl;
-    delete[] layer->activations;
+    if(l->data == nullptr) {
+	   delete[] l->bias;
+	   delete[] l->weights;
+    }
+    delete[] l->activations;
 }
 
-void init_layer(layer_params * previous, layer_params * l) {
+void init_layer(layer * previous, layer * l) {
 
     std::random_device rd {};
     std::mt19937 gen{rd()};
-    //std::mt19937 gen{0};
     std::normal_distribution<> nd(0, 1);
 
-    // std::cout << "Creating new layer: " << this << std::endl;
-    //
     switch (l->type) 
     {
 	   case INNER_PRODUCT:
@@ -75,7 +65,7 @@ void init_layer(layer_params * previous, layer_params * l) {
 
 			    l->bias = new float [l->n_bias];
 			    for (int i = 0; i < l->n_bias; ++i) {
-				   l->bias[i] = 0.f;  // nd(gen);
+				   l->bias[i] =  nd(gen);
 			    }
 
 			    l->weights = new float [l->n_weights];
@@ -162,16 +152,12 @@ void init_layer(layer_params * previous, layer_params * l) {
 		 }
 		 break;
     }
-    //std::cout << "Initialized layer: " << l << std::endl;
-    //std::cout << l->bias << std::endl;
-    //std::cout << l->weights << std::endl;
-    //std::cout << l->activations << std::endl;
 }
 
-void print(layer_params * network, int size)
+void print(layer * network, int size)
 {
     for (int i = 0; i < size; ++i) {
-	   layer_params * current_layer = network + i;
+	   layer * current_layer = network + i;
         std::cout << "Type: " << type2string[network[i].type] << std::endl;
         std::cout << "Shape: "
 		  	   << network[i].channels << "x"
@@ -192,8 +178,6 @@ void print(layer_params * network, int size)
 			}
 			std::cout << std::endl;
 	   }
-
-	   // Print activations
 
 	   std::cout << std::endl << "Activations: " << std::endl;
 	   if (current_layer->type == CONVOLUTIONAL || current_layer->type == MAX_POOL) {
@@ -219,7 +203,7 @@ void print(layer_params * network, int size)
     }
 }
 
-void inner_product(layer_params * input, layer_params * output)
+void inner_product(layer * input, layer * output)
 {
     for (int outer = 0; outer < output->channels; ++outer) {
 
@@ -251,7 +235,7 @@ void inner_product(layer_params * input, layer_params * output)
     }
 }
 
-void max_pool(layer_params * input, layer_params * output)
+void max_pool(layer * input, layer * output)
 {
     for (int c_out = 0; c_out < output->channels; ++c_out) {
 	   for (int h_out = 0; h_out < output->shape; ++h_out) {
@@ -280,13 +264,8 @@ void max_pool(layer_params * input, layer_params * output)
     }
 }
 
-void convolution(layer_params * input, layer_params * output)
+void convolution(layer * input, layer * output)
 {
-    // input: INPUT_channels x INPUT_height x INPUT_width
-    // output: OUTPUT_channels x OUTPUT_height x OUTPUT_width
-    // weights: INPUT_channels x OUTPUT_channels x kernel_HEIGHT x kernel_WIDTH
-    // bias: OUTPUT_channels
-    //
     int kernel_size = output->kernel_size;
 
     for (int c_outer = 0; c_outer < output->channels; ++c_outer) {
@@ -307,58 +286,55 @@ void convolution(layer_params * input, layer_params * output)
     			    	    		  				+ c_inner * kernel_size * kernel_size
     			    	    		  				+ kernel_y * kernel_size
     			    	    		  				+ kernel_x];
-    
    			        }
       		    }
 			}
-                   output->activations[c_outer * output->shape * output->shape
-                     		         + h_outer * output->shape
-                   	     	         + w_outer] = sum + output->bias[c_outer];
+               output->activations[c_outer * output->shape * output->shape
+                                   + h_outer * output->shape
+                   	     	     + w_outer] = sum + output->bias[c_outer];
 		  }
 	   }
     }
     
 }
 
-int forward(layer_params * last_layer, layer_params * current_layer)
+int forward(layer * last_layer, layer * current_layer)
 {
-        
-    // Calculate the dot product
-    if (current_layer->type == INNER_PRODUCT) {
-
+    switch(current_layer->type) {
+    case INNER_PRODUCT:
 	   inner_product(last_layer, current_layer);
-
-    } else if (current_layer->type == CONVOLUTIONAL) {
-
+	   break;
+    case CONVOLUTIONAL:
 	   convolution(last_layer, current_layer);
-
-    } else if (current_layer->type == MAX_POOL) {
-
+	   break;
+    case MAX_POOL:
 	   max_pool(last_layer, current_layer);
-
+	   break;
+    default:
+	   break;
     }
 
     return 0;
 
 }
 
-int write_layer_spec(const char* file_name, const layer_params * net_spec, int * size) {
+int write_layer_spec(const char* file_name, const layer * net_spec, int * size) {
 
     std::ofstream out(file_name);
     out << *size;
     for (int i = 0; i < *size; ++i) {
-        out.write(reinterpret_cast<const char *>(& net_spec[i]), sizeof(layer_params));
+        out.write(reinterpret_cast<const char *>(& net_spec[i]), sizeof(layer));
     }
 
     std::cout << "Done writing " << *size << " layers!" << std::endl;
     return true;
 }
-int read_layer_spec(const char* file_name, layer_params * net_spec, int * size) {
+int read_layer_spec(const char* file_name, layer * net_spec, int * size) {
 
     std::ifstream in(file_name);
     in >> *size;
     for (int i = 0; i < *size; ++i) {
-        in.read(reinterpret_cast<char *>(& net_spec[i]), sizeof(layer_params));
+        in.read(reinterpret_cast<char *>(& net_spec[i]), sizeof(layer));
     }
 
     std::cout << "Done reading " << *size << " layers!" << std::endl;
@@ -371,65 +347,18 @@ void read_binary_float(float * data, const char * filename, unsigned int length)
     fin.read(reinterpret_cast<char *> (data), length * sizeof(float));
 }
 
-int main()
+int main(int c, char ** argv)
 {
-    {
-    // Load image and weights
     const int INPUT_SIZE = 784;
     float * data = new float[INPUT_SIZE];
-    read_binary_float(data, "input7.bin", INPUT_SIZE);
-
-    for (int i = 0; i < 28; ++i) {
-    	  for (int j = 0; j < 28; ++j) {
-           std::cout << data[i * 28 + j] << " ";
-	  }
-	  std::cout << std::endl;
-    }
+    read_binary_float(data, argv[1], INPUT_SIZE);
 
     const int NUM_WEIGHTS = 431080;
     float * weights = new float[NUM_WEIGHTS];
-    read_binary_float(weights, "lenet_dump.bin", NUM_WEIGHTS);
-    
-   for (int j = 0; j < 10; ++j) {
-	  std::cout << weights[j] << " ";
-   }
-    // Define the network
-    //struct layer_params {
-    //
-    //    int channels;
-    //    int shape;
-    //    int kernel_size;
-    //    int type;
-    //    int stride;
-    //    bool relu;
-    //
-    //float * data;
-    //float * weights;
-    //float * bias;
-    //float * activations;
-    //
-    //    int n_bias;
-    //    int n_weights;
-    //    int n_activations;
-    //};
-    layer_params l =
-    { 1,        //channels
-	 28,       // shape
-	 0,        // kernel_size
-	 DATA,     // type
-	 0,        // stride
-	 false,    // relu
-	 nullptr,  // data
-	 nullptr,  // weights
-	 nullptr,  // bias
-	 nullptr,  // activations
-	 0,        // n_bias
-	 0,        // n_weights
-	 0,        // n_activations
-    };
+    read_binary_float(weights, argv[2], NUM_WEIGHTS);
 
     int num_layers = 7;
-    layer_params net_spec[7] = {
+    layer net_spec[7] = {
 	   {1,28,0,DATA, 0, 0, data},
 	   {20,0,5,CONVOLUTIONAL, 0, 0, weights},
 	   {0,0,2,MAX_POOL},
@@ -438,57 +367,10 @@ int main()
 	   {500,0,0,INNER_PRODUCT, 0, 1, weights + 25570},
 	   {10,0,0,INNER_PRODUCT, 0, 0, weights + 426070}
     };
-    //net_spec[0] = {1,28,0,DATA, 0, 0, 0, 0, 0, data};
-    //net_spec[0].type = DATA;
-    //net_spec[0].data = data;
-    //net_spec[0].shape = 28;
-    //net_spec[0].channels = 1;
-
-    //net_spec[1].type = CONVOLUTIONAL;
-    //net_spec[1].data = weights;
-    //net_spec[1].kernel_size = 5;
-    //net_spec[1].channels = 20;
-
-    //net_spec[2].type = MAX_POOL;
-    //net_spec[2].kernel_size = 2;
-
-    //net_spec[3].type = CONVOLUTIONAL;
-    //net_spec[3].data = weights + 520;
-    //net_spec[3].kernel_size = 5;
-    //net_spec[3].channels = 50;
-
-    //net_spec[4].type = MAX_POOL;
-    //net_spec[4].kernel_size = 2;
-
-    //net_spec[5].type = INNER_PRODUCT;
-    //net_spec[5].data = weights + 25570;
-    //net_spec[5].channels = 500;
-    //net_spec[5].relu = true;
-
-    //net_spec[6].type = INNER_PRODUCT;
-    //net_spec[6].data = weights + 426070;
-    //net_spec[6].channels = 10;
-
-    /*
-    // Write netspec
-    std::cout << "Writing" << std::endl;
-    write_layer_spec("lenet.bin", net_spec, &num_layers);
-
-    net_spec[1].type = CONVOLUTIONAL;
-    net_spec[1].input_shape = 0;
-    net_spec[1].input_channels = 0;
-    net_spec[1].kernel_size = 0;
-    net_spec[1].channels = 0;
-
-    // Read netspec
-    std::cout << "reading" << std::endl;
-    read_layer_spec("lenet.bin", net_spec, &num_layers);
-    */
 
     // Initialize network
-    layer_params * last = nullptr;
+    layer * last = nullptr;
     for (int i = 0; i < num_layers; ++i) {
-	   std::cout << "Initializing: " << &net_spec[i] << std::endl;
         init_layer(last, &net_spec[i]);
         last = &net_spec[i];
     }
@@ -499,21 +381,18 @@ int main()
     }
 
     // Print netspec
-    print(net_spec, 7);
+    //print(net_spec, 7);
 
     // ArgMax of final activation
     int idx = num_layers - 1;
     float max = net_spec[idx].activations[0];
     int argmax = 0;
-    std::cout << "Final layer: ";
     for (int i = 0; i < net_spec[idx].channels; ++i) {
-	   std::cout << net_spec[idx].activations[i] << " ";
         if (net_spec[idx].activations[i] > max) {
             argmax = i;
             max = net_spec[idx].activations[i];
         }
     }
-    std::cout << std::endl;
     std::cout << "Classification: " << argmax << std::endl;
 
     // Free network
@@ -522,6 +401,5 @@ int main()
     }
     delete[] weights;
 
-    }
     return 0;
 }
