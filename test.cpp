@@ -197,19 +197,24 @@ void print(layer_params * network, int size)
 
 	   std::cout << std::endl << "Activations: " << std::endl;
 	   if (current_layer->type == CONVOLUTIONAL || current_layer->type == MAX_POOL) {
-	   for (int c = 0; c < 1; ++c) {
-		  for (int h = 0; h < current_layer->shape; ++h) {
-			 for (int w = 0; w < current_layer->shape; ++w) {
-			    std::cout << current_layer->activations[c * current_layer->shape 
-												 * current_layer->shape
-											    + h * current_layer->shape
-											    + w] << " ";
+		  for (int c = 1; c < 2; ++c) {
+			 for (int h = 0; h < current_layer->shape; ++h) {
+				for (int w = 0; w < current_layer->shape; ++w) {
+				   std::cout << current_layer->activations[c * current_layer->shape 
+													* current_layer->shape
+												   + h * current_layer->shape
+												   + w] << " ";
+				}
+				std::cout << std::endl;
 			 }
 			 std::cout << std::endl;
 		  }
+		  std::cout << std::endl << std::endl;
+	   } else if (current_layer->type == INNER_PRODUCT) {
+		  for (int i = 0; i < 50; ++i) {
+			 std::cout << current_layer->activations[i] << " ";
+		  }
 		  std::cout << std::endl;
-	   }
-	   std::cout << std::endl << std::endl;
 	   }
     }
 }
@@ -326,9 +331,9 @@ void convolution(layer_params * input, layer_params * output)
     			    	       sum += input->activations[c_inner * input->shape * input->shape
     			    	    		               	    + (h_outer + kernel_y) * input->shape
     			    	    						    + w_outer + kernel_x]
-    			    	    		  * output->weights[c_inner * output->channels
+    			    	    		  * output->weights[c_outer * input->channels
     			    	    		  					   * kernel_size * kernel_size
-    			    	    		  				+ c_outer * kernel_size * kernel_size
+    			    	    		  				+ c_inner * kernel_size * kernel_size
     			    	    		  				+ kernel_y * kernel_size
     			    	    		  				+ kernel_x];
     
