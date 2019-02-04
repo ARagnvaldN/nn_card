@@ -211,7 +211,7 @@ void print(layer_params * network, int size)
 		  }
 		  std::cout << std::endl << std::endl;
 	   } else if (current_layer->type == INNER_PRODUCT) {
-		  for (int i = 0; i < 50; ++i) {
+		  for (int i = 0; i < 10; ++i) {
 			 std::cout << current_layer->activations[i] << " ";
 		  }
 		  std::cout << std::endl;
@@ -225,9 +225,18 @@ void inner_product(layer_params * input, layer_params * output)
 
 	   float sum = 0;
 	   for (int inner = 0; inner < input->channels; ++inner) {
+		  for (int y = 0; y < input->shape; ++y) {
+			 for (int x = 0; x < input->shape; ++x) {
 
-		  sum += input->activations[inner]
-			 	* output->weights[inner * output->channels + outer];
+			 sum += input->activations[inner * input->shape * input->shape
+								  + y * input->shape
+								  + x]
+				    * output->weights[outer * input->channels * input->shape * input->shape
+				    				  + inner * input->shape * input->shape
+								  + y * input->shape
+								  + x];
+	   		}
+		  }
 	   }
 
 	   // Apply bias and ReLU
@@ -244,28 +253,20 @@ void inner_product(layer_params * input, layer_params * output)
 
 void max_pool(layer_params * input, layer_params * output)
 {
-    // Hardcode to 2x2 for now...
-    //
-    // x x i i  i i i i  i i i i
-    // x x i i  i i i i  i i i i
-    // i i i i  i i i i  i i i i
-    // i i i i  i i i i  i i i i
-    //
-    int kernel_size = 2;
     for (int c_out = 0; c_out < output->channels; ++c_out) {
 	   for (int h_out = 0; h_out < output->shape; ++h_out) {
 		  for (int w_out = 0; w_out < output->shape; ++w_out) {
 
 			 // Loop over inside of kernel
 			 float max = -10000.0f;
-			 for (int y_kernel = 0; y_kernel < kernel_size; ++y_kernel) {
-				for (int x_kernel = 0; x_kernel < kernel_size; ++x_kernel) {
+			 for (int y_kernel = 0; y_kernel < output->kernel_size; ++y_kernel) {
+				for (int x_kernel = 0; x_kernel < output->kernel_size; ++x_kernel) {
 				    float current_val = input->activations[c_out * input->shape
 					   								    * input->shape
-								   				   + (h_out * kernel_size
+								   				   + (h_out * output->kernel_size
 												      + y_kernel)
 												   		 * input->shape
-								   				   + w_out * kernel_size
+								   				   + w_out * output->kernel_size
 												   + x_kernel];
 				    if (current_val > max)
 					   max = current_val;
@@ -277,7 +278,6 @@ void max_pool(layer_params * input, layer_params * output)
 		  }
 	   }
     }
-    // return i > j? (i > k? i: k): (j > k? j: k);
 }
 
 void convolution(layer_params * input, layer_params * output)
@@ -287,24 +287,8 @@ void convolution(layer_params * input, layer_params * output)
     // weights: INPUT_channels x OUTPUT_channels x kernel_HEIGHT x kernel_WIDTH
     // bias: OUTPUT_channels
     //
-    // x x x i i  i i i i i  i i i i i
-    // x x x i i  i i i i i  i i i i i
-    // x x x i i  i i i i i  i i i i i
-    // i i i i i  i i i i i  i i i i i
-    // i i i i i  i i i i i  i i i i i
-    //
-    // x o o  o o o  o o o  o o o
-    // o o o  o o o  o o o  o o o
-    // o o o  o o o  o o o  o o o
-    //
     int kernel_size = output->kernel_size;
 
-    //for (int j = 0; j < 28; ++j) {
-    //    for (int i = 0; i < 1; ++i) {
-    // 	  std::cout << "(" << i << ", " << j << "): "
-    // 		 	  << input->activations[j * 28 + i] << std::endl;
-    //    }
-    //}
     for (int c_outer = 0; c_outer < output->channels; ++c_outer) {
         for (int h_outer = 0; h_outer < output->shape; ++h_outer) {
         	  for (int w_outer = 0; w_outer < output->shape; ++w_outer) {
@@ -315,19 +299,6 @@ void convolution(layer_params * input, layer_params * output)
       		    for (int kernel_y = 0; kernel_y < kernel_size; ++kernel_y) {
     				   for (int kernel_x = 0; kernel_x < kernel_size; ++kernel_x) {
     			    	    
-					  /*
-					  int c = c_inner * input->shape * input->shape;
-    			    	    	  int h = (h_outer + kernel_y) * input->shape;
-    			    	    	  int w = w_outer + kernel_x;
-					  float activation = input->activations[c, h, w];
-
-    			    	    	  float weights = output->weights[c_inner * output->channels
-    			    	    		  					   * kernel_size * kernel_size
-    			    	    		  				+ c_outer * kernel_size * kernel_size
-    			    	    		  				+ kernel_y * kernel_size
-    			    	    		  				+ kernel_x];
-										*/
-
     			    	       sum += input->activations[c_inner * input->shape * input->shape
     			    	    		               	    + (h_outer + kernel_y) * input->shape
     			    	    						    + w_outer + kernel_x]
@@ -340,16 +311,6 @@ void convolution(layer_params * input, layer_params * output)
    			        }
       		    }
 			}
-			    //std::cout << "Sum: " << sum << std::endl;
-			    //std::cout << "Bias: " << output->bias[c_outer] << std::endl;
-			    int c = c_outer * output->shape * output->shape;
-			    int h = h_outer * output->shape;
-			    int w = w_outer;
-			    if ((c+w+h) > output->n_activations) {
-				   std::cout << "c: " << c << std::endl;
-				   std::cout << "h: " << h << std::endl;
-				   std::cout << "w: " << w << std::endl;
-			    }
                    output->activations[c_outer * output->shape * output->shape
                      		         + h_outer * output->shape
                    	     	         + w_outer] = sum + output->bias[c_outer];
