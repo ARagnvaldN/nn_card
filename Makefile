@@ -1,4 +1,4 @@
-CC_FLAGS=--std=c++11
+CC_FLAGS=--std=c++11 -w
 
 all:
 	g++ ${CC_FLAGS} lenet.cpp -o run && ./run input7.bin lenet.bin \
