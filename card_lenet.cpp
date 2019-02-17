@@ -1,5 +1,4 @@
 #import<fstream>
-#import<iostream>
 using f=float;using z=int;using V=void;
 struct L{z c,s,k,t,ks,r;f*d,*w,*b,*a;z nw,na;};
 V init_layer(L*p,L*l){if(l->t<3){(l->t)?((l->t>1)?(l->s=p->s/2,l->c=p->c,l->na=p->c*l->s*l->s):(l->s=p->s-l->k+1,l->nw=p->c*l->c*l->k*l->k,l->w=l->d,l->b=l->d+l->nw,l->na=l->c*(p->s-l->k+1)*(p->s-l->k+1))):(l->s=1,l->nw=p->c*p->s*p->s*l->c,l->w=l->d,l->b=l->d+l->nw,l->na=l->c);l->a=new f[l->na];}else{l->na=l->c*l->s*l->s;l->a=new f[l->na];std::copy(l->d,l->d+l->na,l->a);}}
@@ -36,7 +35,6 @@ V convolution(L*i,L*o){
     }
     
 }
-V forward(L*l,L*c){c->t?c->t==1?convolution(l,c):max_pool(l,c):inner_product(l,c);}
 V read_binary_f(f*d,char*n,z l){std::ifstream fin(n,std::ios::binary);fin.read(reinterpret_cast<char*>(d),l*4);}
 main(z c,char**a){
     z i=0,g=0,x=6;
