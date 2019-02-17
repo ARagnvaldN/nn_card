@@ -37,11 +37,11 @@ V convolution(L*i,L*o){
 }
 V read_binary_f(f*d,char*n,z l){std::ifstream fin(n,std::ios::binary);fin.read(reinterpret_cast<char*>(d),l*4);}
 main(z c,char**a){
-    z i=0,g=0,x=6;
+    z i=0,g=0;
     f*d=new f[784],*w=new f[431080];read_binary_f(d,a[1],784);read_binary_f(w,a[2],431080);
-    L n[7]={{1,28,0,3,0,0,d},{20,0,5,1,0,0,w},{0,0,2,2},{50,0,5,1,0,0,w+520},{0,0,2,2},{500,0,0,0,0,1,w+25570},{10,0,0,0,0,0,w+426070}};
-    L*l=0;for(i=0;i<7;init_layer(l,&n[i]),l=&n[i++]);
-    for(i=0;i<7-1;++i){n[i+1].t?n[i+1].t==1?convolution(&n[i],&n[i+1]):max_pool(&n[i],&n[i+1]):inner_product(&n[i],&n[i+1]);}
-    f m=*n[x].a;
-    for(i=0;i<n[x].c;n[x].a[i]>m?g=i,m=n[x].a[i]:0,++i);
+    L n[7]={{1,28,0,3,0,0,d},{20,0,5,1,0,0,w},{0,0,2,2},{50,0,5,1,0,0,w+520},{0,0,2,2},{500,0,0,0,0,1,w+25570},{10,0,0,0,0,0,w+426070}},*l=0,*p=n;
+    for(;p-n<7;init_layer(l,p),l=p++);
+    for(p=n,l=p++;p-n<7;l=p++){p->t?p->t==1?convolution(l,p):max_pool(l,p):inner_product(l,p);}
+    f m=*l->a;
+    for(i=0;i<l->c;l->a[i]>m?g=i,m=l->a[i]:0,++i);
     return g;}
